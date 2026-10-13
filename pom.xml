@@ -13,6 +13,7 @@
         <maven.compiler.release>17</maven.compiler.release>
         <flink.version>2.0.2</flink.version>
         <flink.kafka.connector.version>4.0.1-2.0</flink.kafka.connector.version>
+        <slf4j.version>1.7.36</slf4j.version>
     </properties>
 
     <dependencies>
@@ -34,6 +35,19 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
             <version>${flink.kafka.connector.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

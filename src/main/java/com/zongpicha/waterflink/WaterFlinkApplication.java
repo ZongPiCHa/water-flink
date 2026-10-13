@@ -8,9 +8,14 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class WaterFlinkApplication {
+
+    private static final Logger LOG = LoggerFactory.getLogger(WaterFlinkApplication.class);
 
     private WaterFlinkApplication() {
     }
@@ -47,8 +52,8 @@ public final class WaterFlinkApplication {
                 .setProperty("partition.discovery.interval.ms", "10000")
                 .build();
 
-        System.out.printf(
-                "Starting water-flink: bootstrapServers=%s, topic=%s, groupId=%s, offsets=%s%n",
+        LOG.info(
+                "Starting water-flink: bootstrapServers={}, topic={}, groupId={}, offsets={}",
                 bootstrapServers,
                 topic,
                 groupId,
@@ -61,9 +66,15 @@ public final class WaterFlinkApplication {
                         "Kafka source")
                 .name("Kafka source")
                 .uid("kafka-source")
-                .print("water-flink")
-                .name("stdout sink")
-                .uid("stdout-sink");
+                .map(event -> {
+                    LOG.info("Kafka event: {}", event);
+                    return event;
+                })
+                .name("Log Kafka event")
+                .uid("log-kafka-event")
+                .sinkTo(new DiscardingSink<>())
+                .name("Discard sink")
+                .uid("discard-sink");
 
         environment.execute("water-flink-kafka-debug");
     }
