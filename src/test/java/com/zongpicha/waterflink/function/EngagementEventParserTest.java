@@ -35,7 +35,7 @@ class EngagementEventParserTest {
     }
 
     @Test
-    void parsesFollowAndUsesExplicitTarget() throws Exception {
+    void parsesFollowAndKeepsProjectAttribution() throws Exception {
         EngagementEvent event = EngagementEventParser.parse("""
                 {
                   "timestamp": 1791912945337,
@@ -43,13 +43,14 @@ class EngagementEventParserTest {
                   "action": "follow",
                   "user_id": "actor-2",
                   "properties": {
+                    "project_id": "project-2",
                     "target_user_id": "target-2"
                   }
                 }
                 """);
 
         assertEquals("target-2", event.getTargetUserId());
-        assertNull(event.getProjectId());
+        assertEquals("project-2", event.getProjectId());
         assertEquals("follow|actor-2|target-2", event.relationKey());
     }
 

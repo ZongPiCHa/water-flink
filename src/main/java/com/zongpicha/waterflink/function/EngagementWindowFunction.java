@@ -7,31 +7,51 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 
 import com.zongpicha.waterflink.model.EngagementAccumulator;
-import com.zongpicha.waterflink.model.UserEngagementStats;
+import com.zongpicha.waterflink.model.EngagementStats;
+import com.zongpicha.waterflink.model.StatsScope;
+import com.zongpicha.waterflink.model.WindowType;
 
-public final class UserMinuteWindowFunction
+public final class EngagementWindowFunction
         extends ProcessWindowFunction<
                 EngagementAccumulator,
-                UserEngagementStats,
+                EngagementStats,
                 String,
                 TimeWindow> {
 
     private static final long serialVersionUID = 1L;
 
+    private final StatsScope scope;
+    private final WindowType windowType;
+
+    public EngagementWindowFunction(StatsScope scope, WindowType windowType) {
+        this.scope = scope;
+        this.windowType = windowType;
+    }
+
     @Override
     public void process(
-            String targetUserId,
+            String key,
             Context context,
             Iterable<EngagementAccumulator> values,
-            Collector<UserEngagementStats> output) {
+            Collector<EngagementStats> output) {
         Iterator<EngagementAccumulator> iterator = values.iterator();
         if (!iterator.hasNext()) {
             return;
         }
 
         EngagementAccumulator accumulator = iterator.next();
-        output.collect(new UserEngagementStats(
-                targetUserId,
+        String userId = scope == StatsScope.USER
+                ? key
+                : accumulator.getTargetUserId();
+        String projectId = scope == StatsScope.PROJECT
+                ? key
+                : null;
+
+        output.collect(new EngagementStats(
+                scope,
+                windowType,
+                userId,
+                projectId,
                 context.window().getStart(),
                 context.window().getEnd(),
                 accumulator.getLikes(),

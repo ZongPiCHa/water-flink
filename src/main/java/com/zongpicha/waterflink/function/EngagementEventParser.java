@@ -76,14 +76,13 @@ public final class EngagementEventParser
             throw new IllegalArgumentException("missing object field: properties");
         }
 
-        String projectId = null;
+        String projectId = requiredText(properties, "project_id");
         String targetUserId;
         String commentId = null;
 
         if ("follow".equals(action)) {
             targetUserId = requiredText(properties, "target_user_id");
         } else {
-            projectId = requiredText(properties, "project_id");
             targetUserId = requiredText(properties, "author_user_id");
             if ("comment".equals(action) || "delete_comment".equals(action)) {
                 commentId = requiredText(properties, "comment_id");

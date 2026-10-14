@@ -17,9 +17,11 @@ class EngagementAggregateFunctionTest {
         function.add(new MetricDelta("user-1", "project-1", 1L, 0L, 0L, 0L), accumulator);
         function.add(new MetricDelta("user-1", "project-1", -1L, 0L, 0L, 0L), accumulator);
         function.add(new MetricDelta("user-1", "project-1", 0L, 1L, 1L, 0L), accumulator);
-        function.add(new MetricDelta("user-1", null, 0L, 0L, 0L, 1L), accumulator);
+        function.add(new MetricDelta("user-1", "project-1", 0L, 0L, 0L, 1L), accumulator);
 
         EngagementAccumulator result = function.getResult(accumulator);
+        assertEquals("user-1", result.getTargetUserId());
+        assertEquals("project-1", result.getProjectId());
         assertEquals(0L, result.getLikes());
         assertEquals(1L, result.getComments());
         assertEquals(1L, result.getShares());

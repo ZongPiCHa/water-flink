@@ -8,23 +8,28 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.zongpicha.waterflink.model.UserEngagementStats;
+import com.zongpicha.waterflink.model.EngagementStats;
 
-public final class UserStatsLogFunction
-        implements MapFunction<UserEngagementStats, UserEngagementStats> {
+public final class EngagementStatsLogFunction
+        implements MapFunction<EngagementStats, EngagementStats> {
 
     private static final long serialVersionUID = 1L;
-    private static final Logger LOG = LoggerFactory.getLogger(UserStatsLogFunction.class);
+    private static final Logger LOG =
+            LoggerFactory.getLogger(EngagementStatsLogFunction.class);
     private static final DateTimeFormatter WINDOW_TIME_FORMAT = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
 
     @Override
-    public UserEngagementStats map(UserEngagementStats stats) {
+    public EngagementStats map(EngagementStats stats) {
         LOG.info(
-                "User minute stats: target_user_id={}, window_start={}, window_end={}, "
-                        + "likes={}, comments={}, shares={}, follows={}",
-                stats.getTargetUserId(),
+                "Engagement stats: scope={}, window_type={}, user_id={}, project_id={}, "
+                        + "window_start={}, window_end={}, likes={}, comments={}, "
+                        + "shares={}, follows={}",
+                stats.getScope(),
+                stats.getWindowType(),
+                stats.getUserId(),
+                stats.getProjectId(),
                 WINDOW_TIME_FORMAT.format(Instant.ofEpochMilli(stats.getWindowStart())),
                 WINDOW_TIME_FORMAT.format(Instant.ofEpochMilli(stats.getWindowEnd())),
                 stats.getLikes(),

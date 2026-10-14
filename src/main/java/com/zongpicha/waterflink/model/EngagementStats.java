@@ -2,11 +2,14 @@ package com.zongpicha.waterflink.model;
 
 import java.io.Serializable;
 
-public class UserEngagementStats implements Serializable {
+public class EngagementStats implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private String targetUserId;
+    private StatsScope scope;
+    private WindowType windowType;
+    private String userId;
+    private String projectId;
     private long windowStart;
     private long windowEnd;
     private long likes;
@@ -14,18 +17,24 @@ public class UserEngagementStats implements Serializable {
     private long shares;
     private long follows;
 
-    public UserEngagementStats() {
+    public EngagementStats() {
     }
 
-    public UserEngagementStats(
-            String targetUserId,
+    public EngagementStats(
+            StatsScope scope,
+            WindowType windowType,
+            String userId,
+            String projectId,
             long windowStart,
             long windowEnd,
             long likes,
             long comments,
             long shares,
             long follows) {
-        this.targetUserId = targetUserId;
+        this.scope = scope;
+        this.windowType = windowType;
+        this.userId = userId;
+        this.projectId = projectId;
         this.windowStart = windowStart;
         this.windowEnd = windowEnd;
         this.likes = likes;
@@ -34,12 +43,36 @@ public class UserEngagementStats implements Serializable {
         this.follows = follows;
     }
 
-    public String getTargetUserId() {
-        return targetUserId;
+    public StatsScope getScope() {
+        return scope;
     }
 
-    public void setTargetUserId(String targetUserId) {
-        this.targetUserId = targetUserId;
+    public void setScope(StatsScope scope) {
+        this.scope = scope;
+    }
+
+    public WindowType getWindowType() {
+        return windowType;
+    }
+
+    public void setWindowType(WindowType windowType) {
+        this.windowType = windowType;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public String getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
     }
 
     public long getWindowStart() {

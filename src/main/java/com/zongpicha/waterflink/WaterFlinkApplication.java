@@ -9,6 +9,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
@@ -19,15 +20,19 @@ import org.slf4j.LoggerFactory;
 import com.zongpicha.waterflink.function.EffectiveEngagementFunction;
 import com.zongpicha.waterflink.function.EngagementAggregateFunction;
 import com.zongpicha.waterflink.function.EngagementEventParser;
-import com.zongpicha.waterflink.function.UserMinuteWindowFunction;
-import com.zongpicha.waterflink.function.UserStatsLogFunction;
+import com.zongpicha.waterflink.function.EngagementStatsLogFunction;
+import com.zongpicha.waterflink.function.EngagementWindowFunction;
 import com.zongpicha.waterflink.model.EngagementEvent;
+import com.zongpicha.waterflink.model.EngagementStats;
 import com.zongpicha.waterflink.model.MetricDelta;
-import com.zongpicha.waterflink.model.UserEngagementStats;
+import com.zongpicha.waterflink.model.StatsScope;
+import com.zongpicha.waterflink.model.WindowType;
 
 public final class WaterFlinkApplication {
 
     private static final Logger LOG = LoggerFactory.getLogger(WaterFlinkApplication.class);
+    private static final Duration ALLOWED_LATENESS = Duration.ofMinutes(5);
+    private static final Duration SHANGHAI_DAY_OFFSET = Duration.ofHours(-8);
 
     private WaterFlinkApplication() {
     }
@@ -98,24 +103,72 @@ public final class WaterFlinkApplication {
                 .name("Resolve effective engagement")
                 .uid("resolve-effective-engagement");
 
-        DataStream<UserEngagementStats> minuteStats = metricDeltas
-                .keyBy(MetricDelta::getTargetUserId)
-                .window(TumblingEventTimeWindows.of(Duration.ofMinutes(1)))
-                .aggregate(
-                        new EngagementAggregateFunction(),
-                        new UserMinuteWindowFunction())
-                .name("Aggregate user minute stats")
-                .uid("aggregate-user-minute-stats");
+        DataStream<EngagementStats> engagementStats = aggregateStats(
+                metricDeltas,
+                StatsScope.USER,
+                WindowType.MINUTE,
+                TumblingEventTimeWindows.of(Duration.ofMinutes(1)))
+                .union(
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.USER,
+                                WindowType.HOUR,
+                                TumblingEventTimeWindows.of(Duration.ofHours(1))),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.USER,
+                                WindowType.DAY,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(1),
+                                        SHANGHAI_DAY_OFFSET)),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.PROJECT,
+                                WindowType.MINUTE,
+                                TumblingEventTimeWindows.of(Duration.ofMinutes(1))),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.PROJECT,
+                                WindowType.HOUR,
+                                TumblingEventTimeWindows.of(Duration.ofHours(1))),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.PROJECT,
+                                WindowType.DAY,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(1),
+                                        SHANGHAI_DAY_OFFSET)));
 
-        minuteStats
-                .map(new UserStatsLogFunction())
-                .name("Log user minute stats")
-                .uid("log-user-minute-stats")
+        engagementStats
+                .map(new EngagementStatsLogFunction())
+                .name("Log engagement stats")
+                .uid("log-engagement-stats")
                 .sinkTo(new DiscardingSink<>())
                 .name("Discard sink")
                 .uid("discard-sink");
 
-        environment.execute("water-flink-user-engagement-stats");
+        environment.execute("water-flink-engagement-stats");
+    }
+
+    private static DataStream<EngagementStats> aggregateStats(
+            DataStream<MetricDelta> metricDeltas,
+            StatsScope scope,
+            WindowType windowType,
+            TumblingEventTimeWindows windowAssigner) {
+        KeyedStream<MetricDelta, String> keyedDeltas = scope == StatsScope.USER
+                ? metricDeltas.keyBy(MetricDelta::getTargetUserId)
+                : metricDeltas.keyBy(MetricDelta::getProjectId);
+        String scopeName = scope.name().toLowerCase(Locale.ROOT);
+        String windowName = windowType.name().toLowerCase(Locale.ROOT);
+
+        return keyedDeltas
+                .window(windowAssigner)
+                .allowedLateness(ALLOWED_LATENESS)
+                .aggregate(
+                        new EngagementAggregateFunction(),
+                        new EngagementWindowFunction(scope, windowType))
+                .name("Aggregate " + scopeName + " " + windowName + " stats")
+                .uid("aggregate-" + scopeName + "-" + windowName + "-stats");
     }
 
     private static String env(String name, String defaultValue) {

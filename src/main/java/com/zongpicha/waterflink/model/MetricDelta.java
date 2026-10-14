@@ -48,7 +48,7 @@ public class MetricDelta implements Serializable {
 
     public static MetricDelta follow(EngagementEvent event) {
         return new MetricDelta(
-                event.getTargetUserId(), null, 0L, 0L, 0L, 1L);
+                event.getTargetUserId(), event.getProjectId(), 0L, 0L, 0L, 1L);
     }
 
     public String getTargetUserId() {
