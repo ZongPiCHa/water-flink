@@ -16,6 +16,8 @@ public class EngagementStats implements Serializable {
     private long comments;
     private long shares;
     private long follows;
+    private long heatScore;
+    private long scoreVersion;
 
     public EngagementStats() {
     }
@@ -121,5 +123,21 @@ public class EngagementStats implements Serializable {
 
     public void setFollows(long follows) {
         this.follows = follows;
+    }
+
+    public long getHeatScore() {
+        return heatScore;
+    }
+
+    public void setHeatScore(long heatScore) {
+        this.heatScore = heatScore;
+    }
+
+    public long getScoreVersion() {
+        return scoreVersion;
+    }
+
+    public void setScoreVersion(long scoreVersion) {
+        this.scoreVersion = scoreVersion;
     }
 }

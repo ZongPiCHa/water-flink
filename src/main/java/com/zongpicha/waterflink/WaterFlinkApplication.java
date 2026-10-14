@@ -5,14 +5,16 @@ import java.util.Locale;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.core.execution.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.BroadcastStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.triggers.ContinuousProcessingTimeTrigger;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,18 +22,22 @@ import org.slf4j.LoggerFactory;
 import com.zongpicha.waterflink.function.EffectiveEngagementFunction;
 import com.zongpicha.waterflink.function.EngagementAggregateFunction;
 import com.zongpicha.waterflink.function.EngagementEventParser;
-import com.zongpicha.waterflink.function.EngagementStatsLogFunction;
 import com.zongpicha.waterflink.function.EngagementWindowFunction;
+import com.zongpicha.waterflink.function.HeatScoreBroadcastFunction;
+import com.zongpicha.waterflink.function.HeatScoreRuleParser;
 import com.zongpicha.waterflink.model.EngagementEvent;
 import com.zongpicha.waterflink.model.EngagementStats;
+import com.zongpicha.waterflink.model.HeatScoreRule;
 import com.zongpicha.waterflink.model.MetricDelta;
 import com.zongpicha.waterflink.model.StatsScope;
 import com.zongpicha.waterflink.model.WindowType;
+import com.zongpicha.waterflink.sink.EngagementJdbcSinks;
 
 public final class WaterFlinkApplication {
 
     private static final Logger LOG = LoggerFactory.getLogger(WaterFlinkApplication.class);
     private static final Duration ALLOWED_LATENESS = Duration.ofMinutes(5);
+    private static final Duration STATS_EMIT_INTERVAL = Duration.ofSeconds(30);
     private static final Duration SHANGHAI_DAY_OFFSET = Duration.ofHours(-8);
     private static final Duration SHANGHAI_WEEK_OFFSET = Duration.ofHours(-80);
 
@@ -44,6 +50,13 @@ public final class WaterFlinkApplication {
         String groupId = env("KAFKA_GROUP_ID", "water-flink-debug-v1");
         String startingOffsets = env("KAFKA_STARTING_OFFSETS", "latest")
                 .toLowerCase(Locale.ROOT);
+        String heatConfigTopic =
+                env("HEAT_CONFIG_TOPIC", "water.heat-score-config.v1");
+        String heatConfigGroupId =
+                env("HEAT_CONFIG_GROUP_ID", "water-flink-heat-config-v1");
+        String mysqlJdbcUrl = requiredEnv("MYSQL_JDBC_URL");
+        String mysqlUser = requiredEnv("MYSQL_USER");
+        String mysqlPassword = requiredEnv("MYSQL_PASSWORD");
 
         OffsetsInitializer offsetsInitializer = switch (startingOffsets) {
             case "earliest" ->
@@ -70,12 +83,22 @@ public final class WaterFlinkApplication {
                 .setProperty("partition.discovery.interval.ms", "10000")
                 .build();
 
+        KafkaSource<String> heatConfigSource = KafkaSource.<String>builder()
+                .setBootstrapServers(bootstrapServers)
+                .setTopics(heatConfigTopic)
+                .setGroupId(heatConfigGroupId)
+                .setStartingOffsets(OffsetsInitializer.earliest())
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
         LOG.info(
-                "Starting water-flink: bootstrapServers={}, topic={}, groupId={}, offsets={}",
+                "Starting water-flink: bootstrapServers={}, topic={}, groupId={}, "
+                        + "offsets={}, heatConfigTopic={}",
                 bootstrapServers,
                 topic,
                 groupId,
-                startingOffsets);
+                startingOffsets,
+                heatConfigTopic);
 
         DataStream<EngagementEvent> engagementEvents = environment
                 .fromSource(
@@ -103,6 +126,24 @@ public final class WaterFlinkApplication {
                 .process(new EffectiveEngagementFunction())
                 .name("Resolve effective engagement")
                 .uid("resolve-effective-engagement");
+
+        MapStateDescriptor<String, HeatScoreRule> heatRuleState =
+                new MapStateDescriptor<>(
+                        "active-heat-score-rule",
+                        String.class,
+                        HeatScoreRule.class);
+        BroadcastStream<HeatScoreRule> heatRules = environment
+                .fromSource(
+                        heatConfigSource,
+                        WatermarkStrategy.noWatermarks(),
+                        "Heat score config source")
+                .name("Heat score config source")
+                .uid("heat-score-config-source")
+                .setParallelism(1)
+                .flatMap(new HeatScoreRuleParser())
+                .name("Parse heat score config")
+                .uid("parse-heat-score-config")
+                .broadcast(heatRuleState);
 
         DataStream<EngagementStats> engagementStats = aggregateStats(
                 metricDeltas,
@@ -158,13 +199,33 @@ public final class WaterFlinkApplication {
                                         Duration.ofDays(7),
                                         SHANGHAI_WEEK_OFFSET)));
 
-        engagementStats
-                .map(new EngagementStatsLogFunction())
-                .name("Log engagement stats")
-                .uid("log-engagement-stats")
-                .sinkTo(new DiscardingSink<>())
-                .name("Discard sink")
-                .uid("discard-sink");
+        DataStream<EngagementStats> scoredStats = engagementStats
+                .connect(heatRules)
+                .process(new HeatScoreBroadcastFunction(heatRuleState))
+                .name("Calculate heat score")
+                .uid("calculate-heat-score");
+
+        scoredStats
+                .filter(stats -> stats.getScope() == StatsScope.USER)
+                .name("Select user stats")
+                .uid("select-user-stats")
+                .sinkTo(EngagementJdbcSinks.userSink(
+                        mysqlJdbcUrl,
+                        mysqlUser,
+                        mysqlPassword))
+                .name("Upsert user stats")
+                .uid("upsert-user-stats");
+
+        scoredStats
+                .filter(stats -> stats.getScope() == StatsScope.PROJECT)
+                .name("Select project stats")
+                .uid("select-project-stats")
+                .sinkTo(EngagementJdbcSinks.projectSink(
+                        mysqlJdbcUrl,
+                        mysqlUser,
+                        mysqlPassword))
+                .name("Upsert project stats")
+                .uid("upsert-project-stats");
 
         environment.execute("water-flink-engagement-stats");
     }
@@ -182,6 +243,7 @@ public final class WaterFlinkApplication {
 
         return keyedDeltas
                 .window(windowAssigner)
+                .trigger(ContinuousProcessingTimeTrigger.of(STATS_EMIT_INTERVAL))
                 .allowedLateness(ALLOWED_LATENESS)
                 .aggregate(
                         new EngagementAggregateFunction(),
@@ -193,5 +255,13 @@ public final class WaterFlinkApplication {
     private static String env(String name, String defaultValue) {
         String value = System.getenv(name);
         return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
+    private static String requiredEnv(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " is required");
+        }
+        return value.trim();
     }
 }

@@ -12,9 +12,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>17</maven.compiler.release>
         <flink.version>2.0.2</flink.version>
+        <flink.jdbc.connector.version>4.0.0-2.0</flink.jdbc.connector.version>
         <flink.kafka.connector.version>4.0.1-2.0</flink.kafka.connector.version>
         <jackson.version>2.18.2</jackson.version>
         <junit.version>5.11.4</junit.version>
+        <mysql.connector.version>9.4.0</mysql.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
     </properties>
 
@@ -43,6 +45,18 @@
                     <artifactId>slf4j-api</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-jdbc-core</artifactId>
+            <version>${flink.jdbc.connector.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>${mysql.connector.version}</version>
         </dependency>
 
         <dependency>
