@@ -33,6 +33,7 @@ public final class WaterFlinkApplication {
     private static final Logger LOG = LoggerFactory.getLogger(WaterFlinkApplication.class);
     private static final Duration ALLOWED_LATENESS = Duration.ofMinutes(5);
     private static final Duration SHANGHAI_DAY_OFFSET = Duration.ofHours(-8);
+    private static final Duration SHANGHAI_WEEK_OFFSET = Duration.ofHours(-80);
 
     private WaterFlinkApplication() {
     }
@@ -106,14 +107,9 @@ public final class WaterFlinkApplication {
         DataStream<EngagementStats> engagementStats = aggregateStats(
                 metricDeltas,
                 StatsScope.USER,
-                WindowType.MINUTE,
-                TumblingEventTimeWindows.of(Duration.ofMinutes(1)))
+                WindowType.HOUR,
+                TumblingEventTimeWindows.of(Duration.ofHours(1)))
                 .union(
-                        aggregateStats(
-                                metricDeltas,
-                                StatsScope.USER,
-                                WindowType.HOUR,
-                                TumblingEventTimeWindows.of(Duration.ofHours(1))),
                         aggregateStats(
                                 metricDeltas,
                                 StatsScope.USER,
@@ -123,9 +119,18 @@ public final class WaterFlinkApplication {
                                         SHANGHAI_DAY_OFFSET)),
                         aggregateStats(
                                 metricDeltas,
-                                StatsScope.PROJECT,
-                                WindowType.MINUTE,
-                                TumblingEventTimeWindows.of(Duration.ofMinutes(1))),
+                                StatsScope.USER,
+                                WindowType.THREE_DAY,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(3),
+                                        SHANGHAI_DAY_OFFSET)),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.USER,
+                                WindowType.WEEK,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(7),
+                                        SHANGHAI_WEEK_OFFSET)),
                         aggregateStats(
                                 metricDeltas,
                                 StatsScope.PROJECT,
@@ -137,7 +142,21 @@ public final class WaterFlinkApplication {
                                 WindowType.DAY,
                                 TumblingEventTimeWindows.of(
                                         Duration.ofDays(1),
-                                        SHANGHAI_DAY_OFFSET)));
+                                        SHANGHAI_DAY_OFFSET)),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.PROJECT,
+                                WindowType.THREE_DAY,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(3),
+                                        SHANGHAI_DAY_OFFSET)),
+                        aggregateStats(
+                                metricDeltas,
+                                StatsScope.PROJECT,
+                                WindowType.WEEK,
+                                TumblingEventTimeWindows.of(
+                                        Duration.ofDays(7),
+                                        SHANGHAI_WEEK_OFFSET)));
 
         engagementStats
                 .map(new EngagementStatsLogFunction())

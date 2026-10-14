@@ -15,21 +15,10 @@ class WindowAlignmentTest {
 
     @Test
     void alignsDayWindowToShanghaiMidnight() {
-        TumblingEventTimeWindows assigner = TumblingEventTimeWindows.of(
+        TimeWindow window = assignWindow(
                 Duration.ofDays(1),
-                Duration.ofHours(-8));
-        long eventTime = Instant.parse("2026-10-14T07:30:00Z").toEpochMilli();
-
-        Collection<TimeWindow> windows = assigner.assignWindows(
-                new Object(),
-                eventTime,
-                new WindowAssigner.WindowAssignerContext() {
-                    @Override
-                    public long getCurrentProcessingTime() {
-                        return 0L;
-                    }
-                });
-        TimeWindow window = windows.iterator().next();
+                Duration.ofHours(-8),
+                "2026-10-14T07:30:00Z");
 
         assertEquals(
                 Instant.parse("2026-10-13T16:00:00Z").toEpochMilli(),
@@ -37,5 +26,53 @@ class WindowAlignmentTest {
         assertEquals(
                 Instant.parse("2026-10-14T16:00:00Z").toEpochMilli(),
                 window.getEnd());
+    }
+
+    @Test
+    void alignsThreeDayWindowToFixedShanghaiDateBlocks() {
+        TimeWindow window = assignWindow(
+                Duration.ofDays(3),
+                Duration.ofHours(-8),
+                "2026-10-14T07:30:00Z");
+
+        assertEquals(
+                Instant.parse("2026-10-12T16:00:00Z").toEpochMilli(),
+                window.getStart());
+        assertEquals(
+                Instant.parse("2026-10-15T16:00:00Z").toEpochMilli(),
+                window.getEnd());
+    }
+
+    @Test
+    void alignsWeekWindowToShanghaiMonday() {
+        TimeWindow window = assignWindow(
+                Duration.ofDays(7),
+                Duration.ofHours(-80),
+                "2026-10-14T07:30:00Z");
+
+        assertEquals(
+                Instant.parse("2026-10-11T16:00:00Z").toEpochMilli(),
+                window.getStart());
+        assertEquals(
+                Instant.parse("2026-10-18T16:00:00Z").toEpochMilli(),
+                window.getEnd());
+    }
+
+    private static TimeWindow assignWindow(
+            Duration size,
+            Duration offset,
+            String eventInstant) {
+        TumblingEventTimeWindows assigner =
+                TumblingEventTimeWindows.of(size, offset);
+        Collection<TimeWindow> windows = assigner.assignWindows(
+                new Object(),
+                Instant.parse(eventInstant).toEpochMilli(),
+                new WindowAssigner.WindowAssignerContext() {
+                    @Override
+                    public long getCurrentProcessingTime() {
+                        return 0L;
+                    }
+                });
+        return windows.iterator().next();
     }
 }
