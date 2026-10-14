@@ -127,7 +127,7 @@ public final class EngagementJdbcSinks {
 
     private static JdbcExecutionOptions executionOptions() {
         return JdbcExecutionOptions.builder()
-                .withBatchSize(200)
+                .withBatchSize(1000)
                 .withBatchIntervalMs(1000L)
                 .withMaxRetries(3)
                 .build();
