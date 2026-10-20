@@ -11,6 +11,22 @@ import com.zongpicha.waterflink.model.EngagementEvent;
 class EngagementEventParserTest {
 
     @Test
+    void parsesViewPageAndFutureProjectCounters() throws Exception {
+        for (String action : new String[]{"view_page", "download"}) {
+            EngagementEvent event = EngagementEventParser.parse("""
+                    {"timestamp":1792234940554,
+                     "log_id":"93a34183-8917-4932-845b-05bef0c23266",
+                     "session_id":"074052f7-6e13-4f95-90dc-af170fcdb9d0",
+                     "action":"%s","user_id":"u000000000107592",
+                     "properties":{"project_id":"p000000000100910",
+                                   "author_user_id":"u000000000100910"}}
+                    """.formatted(action));
+            assertEquals(action, event.getAction());
+            assertEquals("u000000000100910", event.getTargetUserId());
+        }
+    }
+
+    @Test
     void parsesProjectEngagementAndUsesAuthorAsTarget() throws Exception {
         EngagementEvent event = EngagementEventParser.parse("""
                 {

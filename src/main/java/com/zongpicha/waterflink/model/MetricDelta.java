@@ -12,6 +12,22 @@ public class MetricDelta implements Serializable {
     private long commentDelta;
     private long shareDelta;
     private long followDelta;
+    private String metricName;
+
+    public String getMetricName() {
+        return metricName;
+    }
+
+    public void setMetricName(String metricName) {
+        this.metricName = metricName;
+    }
+
+    public static MetricDelta count(EngagementEvent event) {
+        MetricDelta delta = new MetricDelta(
+                event.getTargetUserId(), event.getProjectId(), 0L, 0L, 0L, 0L);
+        delta.setMetricName(event.getAction());
+        return delta;
+    }
 
     public MetricDelta() {
     }

@@ -40,7 +40,7 @@ public class EngagementEvent implements Serializable {
             case "comment", "delete_comment" -> "comment|" + commentId;
             case "follow" -> "follow|" + actorUserId + "|" + targetUserId;
             case "share" -> "share|" + logId;
-            default -> throw new IllegalStateException("Unsupported action: " + action);
+            default -> action + "|" + logId;
         };
     }
 

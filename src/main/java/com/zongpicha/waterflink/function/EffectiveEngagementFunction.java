@@ -19,17 +19,28 @@ public final class EffectiveEngagementFunction
     private static final Duration RELATION_STATE_TTL = Duration.ofDays(30);
 
     private transient ValueState<Boolean> activeState;
+    private transient ValueState<Long> lastEventTimestampState;
 
     @Override
     public void open(OpenContext openContext) {
-        ValueStateDescriptor<Boolean> descriptor =
-                new ValueStateDescriptor<>("active-engagement", Boolean.class);
-        descriptor.enableTimeToLive(StateTtlConfig
+        StateTtlConfig ttlConfig = StateTtlConfig
                 .newBuilder(RELATION_STATE_TTL)
                 .updateTtlOnCreateAndWrite()
                 .neverReturnExpired()
-                .build());
-        activeState = getRuntimeContext().getState(descriptor);
+                .build();
+
+        ValueStateDescriptor<Boolean> activeDescriptor =
+                new ValueStateDescriptor<>("active-engagement", Boolean.class);
+        activeDescriptor.enableTimeToLive(ttlConfig);
+        activeState = getRuntimeContext().getState(activeDescriptor);
+
+        ValueStateDescriptor<Long> lastTimestampDescriptor =
+                new ValueStateDescriptor<>(
+                        "last-relation-event-timestamp",
+                        Long.class);
+        lastTimestampDescriptor.enableTimeToLive(ttlConfig);
+        lastEventTimestampState =
+                getRuntimeContext().getState(lastTimestampDescriptor);
     }
 
     @Override
@@ -37,6 +48,27 @@ public final class EffectiveEngagementFunction
             EngagementEvent event,
             Context context,
             Collector<MetricDelta> output) throws Exception {
+        if ("share".equals(event.getAction())) {
+            output.collect(MetricDelta.share(event));
+            return;
+        }
+        switch (event.getAction()) {
+            case "like", "unlike", "comment", "delete_comment", "follow" -> { }
+            default -> {
+                output.collect(MetricDelta.count(event));
+                return;
+            }
+        }
+
+        // Toggle actions are decided by the latest event in event time. An older
+        // event arriving after a newer one (e.g. like after unlike) is stale and
+        // must not flip the relation back.
+        Long lastTimestamp = lastEventTimestampState.value();
+        if (lastTimestamp != null && event.getTimestamp() < lastTimestamp) {
+            return;
+        }
+        lastEventTimestampState.update(event.getTimestamp());
+
         boolean active = Boolean.TRUE.equals(activeState.value());
 
         switch (event.getAction()) {
@@ -64,7 +96,6 @@ public final class EffectiveEngagementFunction
                     output.collect(MetricDelta.comment(event, -1L));
                 }
             }
-            case "share" -> output.collect(MetricDelta.share(event));
             case "follow" -> {
                 if (!active) {
                     activeState.update(true);

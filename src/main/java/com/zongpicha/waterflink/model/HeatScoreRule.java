@@ -1,6 +1,7 @@
 package com.zongpicha.waterflink.model;
 
 import java.io.Serializable;
+import java.util.Map;
 
 public class HeatScoreRule implements Serializable {
 
@@ -14,6 +15,7 @@ public class HeatScoreRule implements Serializable {
     private long commentWeight;
     private long shareWeight;
     private long followWeight;
+    private Map<String, Long> weights;
 
     public HeatScoreRule() {
     }
@@ -32,10 +34,26 @@ public class HeatScoreRule implements Serializable {
     }
 
     public long calculate(EngagementStats stats) {
+        if (weights != null) {
+            long score = 0L;
+            for (Map.Entry<String, Long> entry : weights.entrySet()) {
+                score = Math.addExact(score,
+                        Math.multiplyExact(stats.metricValue(entry.getKey()), entry.getValue()));
+            }
+            return score;
+        }
         return stats.getLikes() * likeWeight
                 + stats.getComments() * commentWeight
                 + stats.getShares() * shareWeight
                 + stats.getFollows() * followWeight;
+    }
+
+    public Map<String, Long> getWeights() {
+        return weights;
+    }
+
+    public void setWeights(Map<String, Long> weights) {
+        this.weights = weights;
     }
 
     public long getVersion() {

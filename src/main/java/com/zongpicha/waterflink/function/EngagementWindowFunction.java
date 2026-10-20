@@ -1,6 +1,7 @@
 package com.zongpicha.waterflink.function;
 
 import java.util.Iterator;
+import java.util.HashMap;
 
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
@@ -47,7 +48,7 @@ public final class EngagementWindowFunction
                 ? key
                 : null;
 
-        output.collect(new EngagementStats(
+        EngagementStats stats = new EngagementStats(
                 scope,
                 windowType,
                 userId,
@@ -57,6 +58,10 @@ public final class EngagementWindowFunction
                 accumulator.getLikes(),
                 accumulator.getComments(),
                 accumulator.getShares(),
-                accumulator.getFollows()));
+                accumulator.getFollows());
+        if (accumulator.getExtraMetrics() != null) {
+            stats.setExtraMetrics(new HashMap<>(accumulator.getExtraMetrics()));
+        }
+        output.collect(stats);
     }
 }

@@ -1,5 +1,7 @@
 package com.zongpicha.waterflink.function;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
@@ -33,6 +35,29 @@ public final class HeatScoreRuleParser
             throw new IllegalArgumentException("rule must be a JSON object");
         }
 
+        if (root.has("weights")) {
+            if (!root.path("schema_version").isIntegralNumber()
+                    || root.path("schema_version").intValue() != 2
+                    || !root.get("weights").isObject()
+                    || root.get("weights").isEmpty()
+                    || root.get("weights").size() > 64) {
+                throw new IllegalArgumentException("expected schema_version=2 and 1..64 weights");
+            }
+            Map<String, Long> weights = new HashMap<>();
+            var fields = root.get("weights").fieldNames();
+            while (fields.hasNext()) {
+                String name = fields.next();
+                if (!name.matches("[a-z][a-z0-9_]{0,47}")
+                        || name.equals("unlike") || name.equals("delete_comment")) {
+                    throw new IllegalArgumentException("invalid metric name: " + name);
+                }
+                weights.put(name, requiredWeight(root.get("weights"), name));
+            }
+            HeatScoreRule rule = new HeatScoreRule();
+            rule.setVersion(requiredPositiveLong(root, "version"));
+            rule.setWeights(weights);
+            return rule;
+        }
         return new HeatScoreRule(
                 requiredPositiveLong(root, "version"),
                 requiredWeight(root, "like_weight"),
@@ -43,7 +68,7 @@ public final class HeatScoreRuleParser
 
     private static long requiredPositiveLong(JsonNode parent, String fieldName) {
         JsonNode value = parent.get(fieldName);
-        if (value == null || !value.canConvertToLong() || value.longValue() <= 0L) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() <= 0L) {
             throw new IllegalArgumentException(fieldName + " must be a positive integer");
         }
         return value.longValue();
@@ -52,6 +77,7 @@ public final class HeatScoreRuleParser
     private static long requiredWeight(JsonNode parent, String fieldName) {
         JsonNode value = parent.get(fieldName);
         if (value == null
+                || !value.isIntegralNumber()
                 || !value.canConvertToLong()
                 || value.longValue() < 0L
                 || value.longValue() > MAX_WEIGHT) {

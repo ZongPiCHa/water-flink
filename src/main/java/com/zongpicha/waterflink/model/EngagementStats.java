@@ -1,6 +1,8 @@
 package com.zongpicha.waterflink.model;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.Map;
 
 public class EngagementStats implements Serializable {
 
@@ -18,6 +20,28 @@ public class EngagementStats implements Serializable {
     private long follows;
     private long heatScore;
     private long scoreVersion;
+    private String userNickname;
+    private String projectName;
+    private LocalDateTime projectPublishedAt;
+    private Map<String, Long> extraMetrics;
+
+    public Map<String, Long> getExtraMetrics() {
+        return extraMetrics;
+    }
+
+    public void setExtraMetrics(Map<String, Long> extraMetrics) {
+        this.extraMetrics = extraMetrics;
+    }
+
+    public long metricValue(String name) {
+        return switch (name) {
+            case "like" -> likes;
+            case "comment" -> comments;
+            case "share" -> shares;
+            case "follow" -> follows;
+            default -> extraMetrics == null ? 0L : extraMetrics.getOrDefault(name, 0L);
+        };
+    }
 
     public EngagementStats() {
     }
@@ -139,5 +163,29 @@ public class EngagementStats implements Serializable {
 
     public void setScoreVersion(long scoreVersion) {
         this.scoreVersion = scoreVersion;
+    }
+
+    public String getUserNickname() {
+        return userNickname;
+    }
+
+    public void setUserNickname(String userNickname) {
+        this.userNickname = userNickname;
+    }
+
+    public String getProjectName() {
+        return projectName;
+    }
+
+    public void setProjectName(String projectName) {
+        this.projectName = projectName;
+    }
+
+    public LocalDateTime getProjectPublishedAt() {
+        return projectPublishedAt;
+    }
+
+    public void setProjectPublishedAt(LocalDateTime projectPublishedAt) {
+        this.projectPublishedAt = projectPublishedAt;
     }
 }

@@ -27,7 +27,8 @@ public final class EngagementEventParser
             "comment",
             "delete_comment",
             "share",
-            "follow");
+            "follow",
+            "view_page");
 
     private transient Counter ignoredEvents;
     private transient Counter malformedEvents;
@@ -65,7 +66,14 @@ public final class EngagementEventParser
 
         String action = requiredText(root, "action").toLowerCase(Locale.ROOT);
         if (!SUPPORTED_ACTIONS.contains(action)) {
-            return null;
+            // Other project-scoped actions use additive PV semantics. They do not
+            // affect heat until explicitly included in the versioned weight map.
+            JsonNode properties = root.path("properties");
+            if (!action.matches("[a-z][a-z0-9_]{0,47}")
+                    || properties.path("project_id").asText("").isBlank()
+                    || properties.path("author_user_id").asText("").isBlank()) {
+                return null;
+            }
         }
 
         long timestamp = requiredLong(root, "timestamp");

@@ -15,10 +15,12 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.zongpicha.waterflink.dimension.DimensionEnrichment;
 import com.zongpicha.waterflink.function.DirtyProcessingTimeTrigger;
 import com.zongpicha.waterflink.function.EffectiveEngagementFunction;
 import com.zongpicha.waterflink.function.EngagementAggregateFunction;
@@ -58,6 +60,10 @@ public final class WaterFlinkApplication {
         String mysqlJdbcUrl = requiredEnv("MYSQL_JDBC_URL");
         String mysqlUser = requiredEnv("MYSQL_USER");
         String mysqlPassword = requiredEnv("MYSQL_PASSWORD");
+        String hudiDimensionPath = env(
+                "HUDI_DIMENSION_PATH",
+                "hdfs://10.37.215.3:8020/hudi/water");
+        String dimensionCacheTtl = env("DIMENSION_CACHE_TTL", "10 min");
         int statsParallelism = Integer.parseInt(
                 env("FLINK_STATS_PARALLELISM", "6"));
         if (statsParallelism < 1) {
@@ -220,7 +226,13 @@ public final class WaterFlinkApplication {
                 .name("Calculate heat score")
                 .uid("calculate-heat-score");
 
-        scoredStats
+        DataStream<EngagementStats> enrichedStats = DimensionEnrichment.enrich(
+                StreamTableEnvironment.create(environment),
+                scoredStats,
+                hudiDimensionPath,
+                dimensionCacheTtl);
+
+        enrichedStats
                 .filter(stats -> stats.getScope() == StatsScope.USER)
                 .name("Select user stats")
                 .uid("select-user-stats")
@@ -231,7 +243,7 @@ public final class WaterFlinkApplication {
                 .name("Upsert user stats")
                 .uid("upsert-user-stats");
 
-        scoredStats
+        enrichedStats
                 .filter(stats -> stats.getScope() == StatsScope.PROJECT)
                 .name("Select project stats")
                 .uid("select-project-stats")

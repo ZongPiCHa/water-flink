@@ -52,17 +52,18 @@ public final class HeatScoreBroadcastFunction
             Collector<EngagementStats> output) throws Exception {
         HeatScoreRule current =
                 context.getBroadcastState(stateDescriptor).get(ACTIVE_RULE_KEY);
-        if (current != null && rule.getVersion() < current.getVersion()) {
+        if (current != null && rule.getVersion() <= current.getVersion()) {
             return;
         }
 
         context.getBroadcastState(stateDescriptor).put(ACTIVE_RULE_KEY, rule);
         LOG.info(
-                "Activated heat score rule: version={}, like={}, comment={}, share={}, follow={}",
+                "Activated heat score rule: version={}, like={}, comment={}, share={}, follow={}, weights={}",
                 rule.getVersion(),
                 rule.getLikeWeight(),
                 rule.getCommentWeight(),
                 rule.getShareWeight(),
-                rule.getFollowWeight());
+                rule.getFollowWeight(),
+                rule.getWeights());
     }
 }

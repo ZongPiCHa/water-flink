@@ -1,6 +1,8 @@
 package com.zongpicha.waterflink.model;
 
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 
 public class EngagementAccumulator implements Serializable {
 
@@ -12,6 +14,15 @@ public class EngagementAccumulator implements Serializable {
     private long comments;
     private long shares;
     private long follows;
+    private Map<String, Long> extraMetrics;
+
+    public Map<String, Long> getExtraMetrics() {
+        return extraMetrics;
+    }
+
+    public void setExtraMetrics(Map<String, Long> extraMetrics) {
+        this.extraMetrics = extraMetrics;
+    }
 
     public EngagementAccumulator() {
     }
@@ -25,6 +36,12 @@ public class EngagementAccumulator implements Serializable {
         comments += delta.getCommentDelta();
         shares += delta.getShareDelta();
         follows += delta.getFollowDelta();
+        if (delta.getMetricName() != null) {
+            if (extraMetrics == null) {
+                extraMetrics = new HashMap<>();
+            }
+            extraMetrics.merge(delta.getMetricName(), 1L, Long::sum);
+        }
     }
 
     public void merge(EngagementAccumulator other) {
@@ -36,6 +53,12 @@ public class EngagementAccumulator implements Serializable {
         comments += other.comments;
         shares += other.shares;
         follows += other.follows;
+        if (other.extraMetrics != null) {
+            if (extraMetrics == null) {
+                extraMetrics = new HashMap<>();
+            }
+            other.extraMetrics.forEach((name, count) -> extraMetrics.merge(name, count, Long::sum));
+        }
     }
 
     public String getTargetUserId() {
