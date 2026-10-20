@@ -16,11 +16,13 @@ import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.util.TimeUtils;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.zongpicha.waterflink.dimension.DimensionEnrichment;
+import com.zongpicha.waterflink.function.CommentRiskDetection;
 import com.zongpicha.waterflink.function.DirtyProcessingTimeTrigger;
 import com.zongpicha.waterflink.function.EffectiveEngagementFunction;
 import com.zongpicha.waterflink.function.EngagementAggregateFunction;
@@ -34,6 +36,7 @@ import com.zongpicha.waterflink.model.HeatScoreRule;
 import com.zongpicha.waterflink.model.MetricDelta;
 import com.zongpicha.waterflink.model.StatsScope;
 import com.zongpicha.waterflink.model.WindowType;
+import com.zongpicha.waterflink.sink.CommentRiskJdbcSink;
 import com.zongpicha.waterflink.sink.EngagementJdbcSinks;
 
 public final class WaterFlinkApplication {
@@ -69,6 +72,19 @@ public final class WaterFlinkApplication {
         if (statsParallelism < 1) {
             throw new IllegalArgumentException(
                     "FLINK_STATS_PARALLELISM must be greater than zero");
+        }
+
+        Duration commentRetractWithin = TimeUtils.parseDuration(
+                env("COMMENT_RETRACT_WITHIN", "5 min"));
+        int commentRiskCount = Integer.parseInt(env("COMMENT_RISK_COUNT", "3"));
+        Duration commentRiskWindow = TimeUtils.parseDuration(
+                env("COMMENT_RISK_WINDOW", "10 min"));
+        int commentRiskParallelism = Integer.parseInt(
+                env("FLINK_COMMENT_RISK_PARALLELISM", "2"));
+        if (commentRiskCount < 2 || commentRiskParallelism < 1) {
+            throw new IllegalArgumentException(
+                    "COMMENT_RISK_COUNT must be at least 2 and "
+                            + "FLINK_COMMENT_RISK_PARALLELISM greater than zero");
         }
 
         OffsetsInitializer offsetsInitializer = switch (startingOffsets) {
@@ -255,6 +271,22 @@ public final class WaterFlinkApplication {
                 .name("Upsert project stats")
                 .uid("upsert-project-stats")
                 .setParallelism(statsParallelism);
+
+        // Runs in the same slots as the stats pipeline; its state is bounded by
+        // the retraction and risk windows, so it adds no slots and little memory.
+        CommentRiskDetection.detect(
+                        engagementEvents,
+                        commentRetractWithin,
+                        commentRiskCount,
+                        commentRiskWindow,
+                        commentRiskParallelism)
+                .sinkTo(CommentRiskJdbcSink.sink(
+                        mysqlJdbcUrl,
+                        mysqlUser,
+                        mysqlPassword))
+                .name("Upsert comment risk alerts")
+                .uid("upsert-comment-risk-alerts")
+                .setParallelism(commentRiskParallelism);
 
         environment.execute("water-flink-engagement-stats");
     }
